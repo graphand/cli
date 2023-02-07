@@ -1,6 +1,7 @@
 #! /usr/bin/env node
 
 import { Command } from "commander";
+import "cross-fetch/polyfill";
 import { commandsMap } from "./lib/Command";
 import "./commands/__register";
 
