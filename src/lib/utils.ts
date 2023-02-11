@@ -1,8 +1,8 @@
 import Client from "@graphand/client";
 import Conf from "conf";
 import prompt from "prompt";
-import { JSONQuery, Model, models } from "@graphand/core";
-import { writeSync } from "fs";
+import { Field, FieldTypes, JSONQuery, Model, models } from "@graphand/core";
+import { writeSync, writeFileSync } from "fs";
 import { spawn } from "child_process";
 import tmp from "tmp";
 
@@ -27,10 +27,11 @@ export const getGlobalClient = () => {
   return globalClient;
 };
 
-export const getProjectClient = async () => {
-  const conf = await getProjectConf();
+export const getProjectClient = async (infos?: ProjectPackageInfos) => {
+  infos ??= await getProjectInfos();
+  const conf = await getProjectConf(infos);
   const globalConf = getGlobalConf();
-  const { project, environment } = await getProjectInfos();
+  const { project, environment } = infos;
   projectClient ??= new Client({
     project,
     environment,
@@ -41,10 +42,9 @@ export const getProjectClient = async () => {
   return projectClient;
 };
 
-export const getProjectConf = async () => {
-  const { project, environment } = await getProjectInfos();
+export const getProjectConf = async (infos: ProjectPackageInfos) => {
   projectConf ??= new Conf({
-    projectName: ["graphand", project, environment].join("."),
+    projectName: ["graphand", infos.project, infos.environment].join("."),
   });
 
   return projectConf;
@@ -52,15 +52,100 @@ export const getProjectConf = async () => {
 
 export const initProjectConf = async (): Promise<ProjectPackageInfos> => {
   console.log("Initializing project configuration ...");
-  console.log("First, let's create a new project on Graphand");
 
-  const client = getGlobalClient();
-  const Project = client.getModel(models.Project);
-  const payload = await promptModel(Project);
+  const _pickProject = async (
+    first = true
+  ): Promise<InstanceType<typeof models.Project>> => {
+    if (first) {
+      console.log(
+        "First, let's target you project. If you already created a project, please type the project id in the field below. If you want to create a new project, you can leave this field blank."
+      );
+    }
 
-  console.log(payload);
+    let project: InstanceType<typeof models.Project>;
+    const { projectId } = await promptFields(
+      new Map([["projectId", new Field({ type: FieldTypes.TEXT })]])
+    );
 
-  return {} as ProjectPackageInfos;
+    const client = getGlobalClient();
+    const Project = client.getModel(models.Project);
+
+    if (projectId) {
+      const _project = await Project.get(projectId);
+      if (!_project) {
+        console.log("Project not found. Please try again.");
+        return _pickProject(false);
+      }
+
+      const projectClient = await getProjectClient({
+        project: _project._id,
+        environment: "master",
+      });
+
+      const datamodelsCount = await projectClient
+        .getModel(models.DataModel)
+        .count();
+
+      if (datamodelsCount) {
+        console.log(
+          `This project seems to already have been initialized (${datamodelsCount} datamodels found). Would you like to continue ?`
+        );
+
+        if (!(await promptYN())) {
+          return _pickProject(false);
+        }
+      }
+
+      project = _project;
+    } else {
+      console.log(
+        "Let's create it. We need some informations about your new project."
+      );
+      const payload = await promptFields(Project.fieldsMap);
+
+      project = await Project.create(payload);
+    }
+
+    return project;
+  };
+
+  const project = await _pickProject();
+
+  let packageJson;
+  try {
+    packageJson = require(process.cwd() + "/package.json");
+  } catch (e) {}
+
+  let packageConfigured = false;
+  if (packageJson) {
+    console.log(
+      "We detected a package.json file in your project directory. Would you like to add Graphand configuration to it ?"
+    );
+
+    if (await promptYN()) {
+      packageJson.graphand = {
+        project: project._id,
+        environment: "master",
+      };
+
+      writeFileSync(
+        process.cwd() + "/package.json",
+        JSON.stringify(packageJson, null, 2)
+      );
+      packageConfigured = true;
+    }
+  }
+
+  if (packageConfigured) {
+    console.log("Project configuration initialized.");
+  } else {
+    console.log(`New project with _id ${project._id} created.`);
+  }
+
+  return {
+    project: project._id,
+    environment: "master",
+  } as ProjectPackageInfos;
 };
 
 export const getGlobalConf = () => {
@@ -82,10 +167,8 @@ export const promptYN = async () => {
   return yesno.startsWith("y");
 };
 
-export const promptModel = async (model: typeof Model) => {
-  await model.initialize();
-
-  const fields = Array.from(model.fieldsMap.keys())
+export const promptFields = async (fieldsMap: Map<string, Field<any>>) => {
+  const fields = Array.from(fieldsMap.keys())
     .filter(
       (f: string) =>
         !["_id", "createdAt", "createdBy", "updatedAt", "updatedBy"].includes(f)
@@ -171,7 +254,9 @@ export const displayJSON = (json: any) => {
 export const infiniteList = async (
   model: typeof Model,
   query: JSONQuery,
-  auto = false
+  auto = false,
+  parsePage: (json: any) => string = (json) =>
+    JSON.stringify(json, null, 2).slice(1, -1).replace(/\n  /g, "\n")
 ) => {
   const pageSize = query.pageSize ?? 7;
   const firstPage = await model.getList({ ...query, pageSize, page: 0 });
@@ -198,7 +283,7 @@ export const infiniteList = async (
         `PAGE ${
           page + 1
         } / ${pagesCount} (${from} to ${to} of ${max} results)` +
-        JSON.stringify(json, null, 2).slice(1, -1).replace(/\n  /g, "\n");
+        parsePage(json);
 
       writeSync(fd, str);
 
@@ -233,4 +318,8 @@ export const infiniteList = async (
   };
 
   tmp.file(_read);
+};
+
+export const isObjectId = (input: string) => {
+  return /^(?=[a-f\d]{24}$)(\d+[a-f]|[a-f]+\d)/.test(input);
 };

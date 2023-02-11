@@ -1,6 +1,5 @@
 import Command from "../lib/Command";
-import prompt from "prompt";
-import { getGlobalClient, getProjectClient, promptModel } from "../lib/utils";
+import { getGlobalClient, getProjectClient, promptFields } from "../lib/utils";
 import { jsonrepair } from "jsonrepair";
 
 type Options = {
@@ -30,7 +29,7 @@ export default class extends Command<Options> {
     if (this.options.json) {
       payload = JSON.parse(jsonrepair(this.options.json));
     } else {
-      payload = promptModel(model);
+      payload = promptFields(model.fieldsMap);
     }
 
     const instance = await model.create(payload);

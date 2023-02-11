@@ -1,10 +1,5 @@
 import Command from "../lib/Command";
-import {
-  getGlobalClient,
-  getProjectClient,
-  infiniteList,
-  isObjectId,
-} from "../lib/utils";
+import { getGlobalClient, getProjectClient, infiniteList } from "../lib/utils";
 import { jsonrepair } from "jsonrepair";
 
 type Options = {
@@ -15,9 +10,9 @@ type Options = {
 };
 
 export default class extends Command<Options> {
-  static command = "query";
-  static alias = "get";
-  static description = "Query instances of given model ...";
+  static command = "list";
+  static description =
+    "List instances of given model with only configKey field ...";
   static options = [
     "-f, --filter <value>",
     "-l, --limit <value>",
@@ -27,7 +22,7 @@ export default class extends Command<Options> {
 
   execute = async () => {
     const slug = this.command.args[0];
-    const queryOn = this.command.args[1];
+    const _id = this.command.args[1];
 
     let client = getGlobalClient();
     let model = client.getModel(slug);
@@ -39,14 +34,17 @@ export default class extends Command<Options> {
 
     await model.initialize();
 
+    if (!model.configKey) {
+      console.log(
+        `Model ${slug} doesn't have a configKey field. Use "query" command instead`
+      );
+      return;
+    }
+
     let filter;
 
-    if (queryOn) {
-      if (isObjectId(queryOn)) {
-        filter = { _id: queryOn };
-      } else if (model.configKey) {
-        filter = { [model.configKey]: queryOn };
-      }
+    if (_id) {
+      filter = { _id };
     } else if (this.options.filter) {
       filter = JSON.parse(jsonrepair(this.options.filter));
     }
@@ -54,8 +52,19 @@ export default class extends Command<Options> {
     const limit = this.options.limit ? parseInt(this.options.limit) : undefined;
     const pageSize = this.options.pageSize
       ? parseInt(this.options.pageSize)
-      : 7;
+      : 30;
 
-    await infiniteList(model, { filter, limit, pageSize }, this.options.auto);
+    await infiniteList(
+      model,
+      { filter, limit, pageSize },
+      this.options.auto,
+      (json) => {
+        return (
+          "\n" +
+          json.map((item: any) => item[model.configKey]).join("\n") +
+          "\n"
+        );
+      }
+    );
   };
 }
