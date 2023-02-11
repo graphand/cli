@@ -1,7 +1,7 @@
 import Client from "@graphand/client";
 import Conf from "conf";
 import prompt from "prompt";
-import { JSONQuery, Model } from "@graphand/core";
+import { JSONQuery, Model, models } from "@graphand/core";
 import { writeSync } from "fs";
 import { spawn } from "child_process";
 import tmp from "tmp";
@@ -27,10 +27,10 @@ export const getGlobalClient = () => {
   return globalClient;
 };
 
-export const getProjectClient = () => {
-  const conf = getProjectConf();
+export const getProjectClient = async () => {
+  const conf = await getProjectConf();
   const globalConf = getGlobalConf();
-  const { project, environment } = getProjectInfos();
+  const { project, environment } = await getProjectInfos();
   projectClient ??= new Client({
     project,
     environment,
@@ -41,13 +41,26 @@ export const getProjectClient = () => {
   return projectClient;
 };
 
-export const getProjectConf = () => {
-  const { project, environment } = getProjectInfos();
+export const getProjectConf = async () => {
+  const { project, environment } = await getProjectInfos();
   projectConf ??= new Conf({
     projectName: ["graphand", project, environment].join("."),
   });
 
   return projectConf;
+};
+
+export const initProjectConf = async (): Promise<ProjectPackageInfos> => {
+  console.log("Initializing project configuration ...");
+  console.log("First, let's create a new project on Graphand");
+
+  const client = getGlobalClient();
+  const Project = client.getModel(models.Project);
+  const payload = await promptModel(Project);
+
+  console.log(payload);
+
+  return {} as ProjectPackageInfos;
 };
 
 export const getGlobalConf = () => {
@@ -95,19 +108,64 @@ export const promptModel = async (model: typeof Model) => {
   );
 };
 
-export const getProjectInfos = (): ProjectPackageInfos => {
-  const packageJson = require(process.cwd() + "/package.json");
-  if (!packageJson.graphand) {
-    throw new Error("Missing graphand infos in package.json");
+export const getProjectInfos = async (
+  init?: boolean
+): Promise<ProjectPackageInfos> => {
+  let packageJson;
+  try {
+    packageJson = require(process.cwd() + "/package.json");
+  } catch (e) {}
+
+  if (!packageJson) {
+    throw new Error("package.json not found. Are you in a project directory ?");
   }
-  if (!packageJson.graphand.project) {
-    throw new Error("Missing project in package.json");
+
+  let graphand: ProjectPackageInfos = packageJson.graphand;
+  if (!graphand) {
+    if (init === undefined) {
+      console.log(
+        "Graphand is not initialized. Would you like to initialize it ?"
+      );
+    }
+
+    if (init || (await promptYN())) {
+      graphand = await initProjectConf();
+    } else {
+      throw new Error("You must initialize Graphand first");
+    }
   }
 
   return {
-    ...packageJson.graphand,
-    environment: packageJson.graphand.environment || "master",
+    ...graphand,
+    environment: graphand.environment || "master",
   };
+};
+
+export const displayJSON = (json: any) => {
+  const _read = (err, path, fd, cleanupCb) => {
+    if (err) {
+      throw err;
+    }
+
+    process.on("SIGINT", function () {
+      cleanupCb();
+      process.exit(0);
+    });
+
+    const str = JSON.stringify(json, null, 2);
+    writeSync(fd, str);
+
+    const more = spawn(`more "${path}"`, {
+      shell: true,
+      stdio: "inherit",
+    });
+
+    more.on("close", async () => {
+      cleanupCb();
+    });
+  };
+
+  tmp.file(_read);
 };
 
 export const infiniteList = async (
@@ -157,7 +215,6 @@ export const infiniteList = async (
 
       more.on("close", async () => {
         if (page + 1 >= pagesCount) {
-          console.log("EOF");
           cleanupCb();
         } else if (auto) {
           _loadPage(page + 1, prevStr + str);

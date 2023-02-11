@@ -1,6 +1,5 @@
 import Command from "../lib/Command";
-import { getGlobalClient, promptModel } from "../lib/utils";
-import { models } from "@graphand/core";
+import { getProjectInfos } from "../lib/utils";
 
 type Options = {};
 
@@ -10,17 +9,18 @@ export default class extends Command<Options> {
   static options = [];
 
   execute = async () => {
-    const packageJson = require(process.cwd() + "/package.json");
+    let packageJson;
+    try {
+      packageJson = require(process.cwd() + "/package.json");
 
-    if (packageJson.graphand) {
-      console.log("Graphand is already initialized");
-      return;
-    }
+      if (packageJson?.graphand) {
+        console.log("Graphand is already initialized");
+        return;
+      }
+    } catch (e) {}
 
-    const client = getGlobalClient();
-    const Project = client.getModel(models.Project);
-    const payload = await promptModel(Project);
+    const projectInfos = await getProjectInfos(true);
 
-    console.log(payload);
+    // TODO : create project + update package.json + detect graphand.config.json
   };
 }

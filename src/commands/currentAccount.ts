@@ -1,14 +1,7 @@
 import Command from "../lib/Command";
-import { getGlobalClient, getProjectClient, infiniteList } from "../lib/utils";
-import { jsonrepair } from "jsonrepair";
-import { models } from "@graphand/core";
+import { displayJSON, getProjectClient } from "../lib/utils";
 
-type Options = {
-  filter: string;
-  limit: string;
-  pageSize: string;
-  auto: boolean;
-};
+type Options = {};
 
 export default class extends Command<Options> {
   static command = "currentAccount";
@@ -16,11 +9,9 @@ export default class extends Command<Options> {
   static options = [];
 
   execute = async () => {
-    const client = getProjectClient();
+    const client = await getProjectClient();
     const currentAccount = await client.currentAccount();
 
-    await infiniteList(client.getModel(models.Account), {
-      ids: [currentAccount._id],
-    });
+    displayJSON(currentAccount.toJSON());
   };
 }

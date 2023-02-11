@@ -14,7 +14,7 @@ export default class extends Command<Options> {
   execute = async () => {
     const { clean } = this.options;
     const configJson = require(process.cwd() + "/graphand.config.json");
-    const client = getProjectClient();
+    const client = await getProjectClient();
 
     const _process = async () => {
       const res = await client.configSync(configJson, {

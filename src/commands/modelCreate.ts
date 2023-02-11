@@ -19,7 +19,7 @@ export default class extends Command<Options> {
     let model = client.getModel(slug);
 
     if (model.scope !== "global") {
-      client = getProjectClient();
+      client = await getProjectClient();
       model = client.getModel(slug);
     }
 
