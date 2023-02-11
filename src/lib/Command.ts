@@ -4,6 +4,7 @@ export const commandsMap = new Map<string, typeof Command>();
 
 class Command<Options extends any = any> {
   static command: string;
+  static alias: string;
   static description: string;
   static options: Array<string>;
 

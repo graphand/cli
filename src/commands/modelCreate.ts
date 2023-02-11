@@ -1,17 +1,16 @@
 import Command from "../lib/Command";
 import prompt from "prompt";
-import {
-  getGlobalClient,
-  getProjectClient,
-  getProjectInfos,
-} from "../lib/utils";
+import { getGlobalClient, getProjectClient, promptModel } from "../lib/utils";
+import { jsonrepair } from "jsonrepair";
 
-type Options = {};
+type Options = {
+  json: string;
+};
 
 export default class extends Command<Options> {
   static command = "create";
   static description = "Create a new instance of given model ...";
-  static options = [];
+  static options = ["-j, --json <value>"];
 
   execute = async () => {
     const slug = this.command.args[0];
@@ -26,29 +25,13 @@ export default class extends Command<Options> {
 
     await model.initialize();
 
-    const fields = Array.from(model.fieldsMap.keys())
-      .filter(
-        (f: string) =>
-          !["_id", "createdAt", "createdBy", "updatedAt", "updatedBy"].includes(
-            f
-          )
-      )
-      .map((f) => ({
-        name: f,
-      }));
+    let payload: any;
 
-    prompt.start();
-    let payload = await prompt.get(fields);
-
-    payload = Object.fromEntries(
-      Object.entries(payload).map(([key, value]: [string, string]) => {
-        if (!value?.length) {
-          return [key, undefined];
-        }
-
-        return [key, value];
-      })
-    );
+    if (this.options.json) {
+      payload = JSON.parse(jsonrepair(this.options.json));
+    } else {
+      payload = promptModel(model);
+    }
 
     const instance = await model.create(payload);
 

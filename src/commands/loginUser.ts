@@ -31,6 +31,10 @@ export default class extends Command<Options> {
     await client.loginUser(credentials);
 
     const conf = getGlobalConf();
+    console.log({
+      accessToken: client.options.accessToken,
+      refreshToken: client.options.refreshToken,
+    });
     conf.set({
       accessToken: client.options.accessToken,
       refreshToken: client.options.refreshToken,

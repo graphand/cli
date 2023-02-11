@@ -21,6 +21,10 @@ commands.forEach((CommandClass) => {
 
   CommandClass.options.forEach((option) => operation.option(option));
 
+  if (CommandClass.alias) {
+    operation.alias(CommandClass.alias);
+  }
+
   operation.action(action);
 });
 

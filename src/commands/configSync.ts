@@ -1,6 +1,5 @@
 import Command from "../lib/Command";
-import { getProjectClient } from "../lib/utils";
-import prompt from "prompt";
+import { getProjectClient, promptYN } from "../lib/utils";
 
 type Options = {
   clean?: boolean;
@@ -31,18 +30,17 @@ export default class extends Command<Options> {
     }
 
     const res = await client.configSync(configJson, { clean });
-    console.log(res);
+    const operationsCount = Object.values(res).reduce(
+      (acc: number, val: any) => acc + val.created + val.updated + val.deleted,
+      0
+    );
+    if (!operationsCount) {
+      console.log("Config is already synced");
+      return;
+    }
 
-    prompt.start();
-    const { yesno } = await prompt.get({
-      name: "yesno",
-      message: "are you sure [y(es)/n(o)]?",
-      validator: /y[es]*|n[o]?/,
-      warning: "Must respond yes or no",
-      default: "no",
-    });
-
-    if (yesno.startsWith("y")) {
+    console.log(`Would you like to continue ?`, res);
+    if (await promptYN()) {
       await _process();
     }
   };
