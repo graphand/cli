@@ -1,26 +1,34 @@
 import Command from "../lib/Command";
-import { getProjectInfos } from "../lib/utils";
+import { getProjectInfos, initProjectConf } from "../lib/utils";
 
-type Options = {};
+type Options = {
+  force?: boolean;
+};
 
 export default class extends Command<Options> {
   static command = "init";
   static description = "Initialize ...";
-  static options = [];
+  static options = ["-f, --force"];
 
   execute = async () => {
     let packageJson;
     try {
       packageJson = require(process.cwd() + "/package.json");
 
-      if (packageJson?.graphand) {
+      if (packageJson?.graphand && !this.options.force) {
         console.log("Graphand is already initialized");
         return;
       }
     } catch (e) {}
 
-    const projectInfos = await getProjectInfos(true);
+    if (!packageJson) {
+      throw new Error(
+        "package.json not found. Are you in a project directory ?"
+      );
+    }
 
-    // TODO : create project + update package.json + detect graphand.config.json
+    await initProjectConf();
+
+    console.log("Graphand initialized successfully");
   };
 }
