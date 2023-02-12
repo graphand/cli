@@ -6,6 +6,7 @@ type Options = {
   filter: string;
   limit: string;
   pageSize: string;
+  key: string;
   auto: boolean;
 };
 
@@ -17,6 +18,7 @@ export default class extends Command<Options> {
     "-f, --filter <value>",
     "-l, --limit <value>",
     "-p, --pageSize <value>",
+    "-k, --key <value>",
     "-a, --auto",
   ];
 
@@ -34,9 +36,11 @@ export default class extends Command<Options> {
 
     await model.initialize();
 
-    if (!model.configKey) {
+    const key = model.configKey || this.options.key;
+
+    if (!key) {
       console.log(
-        `Model ${slug} doesn't have a configKey field. Use "query" command instead`
+        `Model ${slug} doesn't have a configKey field. Use "query" command instead or specify a key with -k option`
       );
       return;
     }
@@ -59,11 +63,7 @@ export default class extends Command<Options> {
       { filter, limit, pageSize },
       this.options.auto,
       (json) => {
-        return (
-          "\n" +
-          json.map((item: any) => item[model.configKey]).join("\n") +
-          "\n"
-        );
+        return "\n" + json.map((item: any) => item[key]).join("\n") + "\n";
       }
     );
   };

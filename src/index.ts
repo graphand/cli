@@ -10,9 +10,13 @@ const program = new Command();
 const commands = Array.from(commandsMap.values());
 
 commands.forEach((CommandClass) => {
-  const action = (options: any, command: Command) => {
+  const action = async (options: any, command: Command) => {
     const context = new CommandClass(options, command);
-    return context.execute();
+    try {
+      return await context.execute();
+    } catch (e) {
+      console.log(`[${e.constructor.name}] ${e.message}`);
+    }
   };
 
   const operation = program

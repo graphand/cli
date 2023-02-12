@@ -5,6 +5,7 @@ import { Field, FieldTypes, JSONQuery, Model, models } from "@graphand/core";
 import { writeSync, writeFileSync } from "fs";
 import { spawn } from "child_process";
 import tmp from "tmp";
+import { Credentials } from "../types";
 
 type ProjectPackageInfos = {
   project: string;
@@ -19,10 +20,44 @@ let projectClient;
 
 export const getGlobalClient = () => {
   const conf = getGlobalConf();
-  globalClient ??= new Client({
-    accessToken: conf.get("accessToken"),
-    refreshToken: conf.get("refreshToken"),
-  });
+
+  if (!globalClient) {
+    globalClient = new Client({
+      accessToken: conf.get("accessToken"),
+      refreshToken: conf.get("refreshToken"),
+    });
+
+    globalClient.middleware(async (input) => {
+      const { error, fetchResponse, retryToken } = input;
+      if (
+        fetchResponse.status === 401 &&
+        ["INVALID_TOKEN"].includes(error?.code)
+      ) {
+        let logged = false;
+        try {
+          console.log(`You need to login to continue...`);
+
+          const credentials: Credentials = await promptFields<Credentials>(
+            new Map(
+              ["email", "password"].map((f) => [
+                f,
+                models.User.fieldsMap.get(f),
+              ])
+            )
+          );
+
+          await loginUser(credentials);
+          logged = true;
+        } catch (e) {
+          input.error = e;
+        }
+
+        if (logged) {
+          throw retryToken;
+        }
+      }
+    });
+  }
 
   return globalClient;
 };
@@ -32,14 +67,53 @@ export const getProjectClient = async (infos?: ProjectPackageInfos) => {
   const conf = await getProjectConf(infos);
   const globalConf = getGlobalConf();
   const { project, environment } = infos;
-  projectClient ??= new Client({
-    project,
-    environment,
-    accessToken: conf.get("accessToken") ?? globalConf.get("accessToken"),
-    refreshToken: conf.get("refreshToken") ?? globalConf.get("refreshToken"),
-  });
+
+  if (!projectClient) {
+    projectClient = new Client({
+      project,
+      environment,
+      accessToken: conf.get("accessToken") ?? globalConf.get("accessToken"),
+      refreshToken: conf.get("refreshToken") ?? globalConf.get("refreshToken"),
+    });
+
+    projectClient.middleware(async (input) => {
+      const { error, fetchResponse, retryToken } = input;
+      if (
+        fetchResponse.status === 401 &&
+        ["INVALID_TOKEN"].includes(error?.code)
+      ) {
+        let logged;
+        try {
+          console.log(`You need to login to continue...`);
+
+          const credentials: Credentials = await promptFields<Credentials>(
+            new Map(
+              ["email", "password"].map((f) => [
+                f,
+                models.Account.fieldsMap.get(f),
+              ])
+            )
+          );
+
+          await loginProject(credentials, projectClient);
+          logged = true;
+        } catch (e) {
+          input.error = e;
+        }
+
+        if (logged) {
+          throw retryToken;
+        }
+      }
+    });
+  }
 
   return projectClient;
+};
+
+export const getClient = async () => {
+  const isGlobal = !isInProject();
+  return isGlobal ? getGlobalClient() : getProjectClient();
 };
 
 export const getProjectConf = async (infos: ProjectPackageInfos) => {
@@ -167,7 +241,9 @@ export const promptYN = async () => {
   return yesno.startsWith("y");
 };
 
-export const promptFields = async (fieldsMap: Map<string, Field<any>>) => {
+export const promptFields = async <R extends any = any>(
+  fieldsMap: Map<string, Field<any>>
+): Promise<R> => {
   const fields = Array.from(fieldsMap.keys())
     .filter(
       (f: string) =>
@@ -175,6 +251,8 @@ export const promptFields = async (fieldsMap: Map<string, Field<any>>) => {
     )
     .map((f) => ({
       name: f,
+      hidden: f === "password",
+      replace: "*",
     }));
 
   prompt.start();
@@ -188,7 +266,22 @@ export const promptFields = async (fieldsMap: Map<string, Field<any>>) => {
 
       return [key, value];
     })
-  );
+  ) as R;
+};
+
+export const isInProject = () => {
+  let packageJson;
+  try {
+    packageJson = require(process.cwd() + "/package.json");
+  } catch (e) {}
+
+  if (!packageJson) {
+    return false;
+  }
+
+  let graphand: ProjectPackageInfos = packageJson.graphand;
+
+  return Boolean(graphand?.project);
 };
 
 export const getProjectInfos = async (
@@ -322,4 +415,64 @@ export const infiniteList = async (
 
 export const isObjectId = (input: string) => {
   return /^(?=[a-f\d]{24}$)(\d+[a-f]|[a-f]+\d)/.test(input);
+};
+
+export const loginProject = async (
+  credentials,
+  client?: Client
+): Promise<"user" | "account"> => {
+  client ??= await getProjectClient();
+  const infos = await getProjectInfos();
+
+  let loggedAs: "user" | "account";
+  try {
+    await client.loginAccount(credentials);
+    loggedAs = "account";
+  } catch (e) {
+    await client.loginUser(credentials);
+    loggedAs = "user";
+  }
+
+  const conf = await getProjectConf(infos);
+  conf.set({
+    accessToken: client.options.accessToken,
+    refreshToken: client.options.refreshToken,
+  });
+
+  console.log("Logged !");
+
+  return loggedAs;
+};
+
+export const loginAccount = async (credentials: {
+  email: string;
+  password: string;
+}) => {
+  const client = await getProjectClient();
+  await client.loginAccount(credentials);
+
+  const infos = await getProjectInfos();
+  const conf = await getProjectConf(infos);
+  conf.set({
+    accessToken: client.options.accessToken,
+    refreshToken: client.options.refreshToken,
+  });
+
+  console.log("Logged !");
+};
+
+export const loginUser = async (credentials: {
+  email: string;
+  password: string;
+}) => {
+  const client = getGlobalClient();
+  await client.loginUser(credentials);
+
+  const conf = getGlobalConf();
+  conf.set({
+    accessToken: client.options.accessToken,
+    refreshToken: client.options.refreshToken,
+  });
+
+  console.log("Logged !");
 };

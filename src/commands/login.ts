@@ -1,5 +1,10 @@
 import Command from "../lib/Command";
-import { loginUser, promptFields } from "../lib/utils";
+import {
+  getClient,
+  isInProject,
+  loginProject,
+  promptFields,
+} from "../lib/utils";
 import { models } from "@graphand/core";
 
 type Options = {
@@ -8,7 +13,7 @@ type Options = {
 };
 
 export default class extends Command<Options> {
-  static command = "login:user";
+  static command = "login";
   static description = "";
   static options = ["-e, --email [value]", "-p, --password [value]"];
 
@@ -30,8 +35,18 @@ export default class extends Command<Options> {
       await promptFields(_promptFields)
     );
 
-    console.log("Logging in...");
+    const isGlobal = !isInProject();
 
-    await loginUser(credentials);
+    const client = await getClient();
+
+    let loggedAs: string;
+    if (isGlobal) {
+      await client.loginUser(credentials);
+      loggedAs = "user";
+    } else {
+      loggedAs = await loginProject(credentials, client);
+    }
+
+    console.log(`Logged in successfully as ${loggedAs}!`);
   };
 }
