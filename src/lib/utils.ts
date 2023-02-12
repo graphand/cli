@@ -344,12 +344,14 @@ export const displayJSON = (json: any) => {
   tmp.file(_read);
 };
 
+let defaultFormat = (json) =>
+  JSON.stringify(json, null, 2).slice(1, -1).replace(/\n  /g, "\n");
+
 export const infiniteList = async (
   model: typeof Model,
   query: JSONQuery,
   auto = false,
-  parsePage: (json: any) => string = (json) =>
-    JSON.stringify(json, null, 2).slice(1, -1).replace(/\n  /g, "\n")
+  format: (json: any) => string = defaultFormat
 ) => {
   const pageSize = query.pageSize ?? 7;
   const firstPage = await model.getList({ ...query, pageSize, page: 0 });
@@ -375,8 +377,7 @@ export const infiniteList = async (
       const str =
         `PAGE ${
           page + 1
-        } / ${pagesCount} (${from} to ${to} of ${max} results)` +
-        parsePage(json);
+        } / ${pagesCount} (${from} to ${to} of ${max} results)` + format(json);
 
       writeSync(fd, str);
 

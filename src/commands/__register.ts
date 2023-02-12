@@ -1,7 +1,6 @@
 require("./modelCreate").default.register("modelCreate");
 require("./modelCount").default.register("modelCount");
 require("./modelQuery").default.register("modelQuery");
-require("./modelList").default.register("modelList");
 require("./config").default.register("config");
 require("./configSync").default.register("configSync");
 require("./login").default.register("login");

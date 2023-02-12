@@ -29,7 +29,7 @@ export default class extends Command<Options> {
     if (this.options.json) {
       payload = JSON.parse(jsonrepair(this.options.json));
     } else {
-      payload = promptFields(model.fieldsMap);
+      payload = await promptFields(model.fieldsMap);
     }
 
     const instance = await model.create(payload);
