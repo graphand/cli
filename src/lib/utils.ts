@@ -27,6 +27,20 @@ export const getGlobalClient = () => {
       refreshToken: conf.get("refreshToken"),
     });
 
+    globalClient.__optionsSubject.subscribe((options) => {
+      const setEntries = [];
+
+      if (options.accessToken !== conf.get("accessToken")) {
+        setEntries.push(["accessToken", options.accessToken]);
+      }
+
+      if (options.refreshToken !== conf.get("refreshToken")) {
+        setEntries.push(["refreshToken", options.refreshToken]);
+      }
+
+      conf.set(Object.fromEntries(setEntries));
+    });
+
     globalClient.middleware(async (input) => {
       const { error, fetchResponse, retryToken } = input;
       if (
@@ -74,6 +88,20 @@ export const getProjectClient = async (infos?: ProjectPackageInfos) => {
       environment,
       accessToken: conf.get("accessToken") ?? globalConf.get("accessToken"),
       refreshToken: conf.get("refreshToken") ?? globalConf.get("refreshToken"),
+    });
+
+    projectClient.__optionsSubject.subscribe((options) => {
+      const setEntries = [];
+
+      if (options.accessToken !== conf.get("accessToken")) {
+        setEntries.push(["accessToken", options.accessToken]);
+      }
+
+      if (options.refreshToken !== conf.get("refreshToken")) {
+        setEntries.push(["refreshToken", options.refreshToken]);
+      }
+
+      conf.set(Object.fromEntries(setEntries));
     });
 
     projectClient.middleware(async (input) => {
@@ -434,12 +462,6 @@ export const loginProject = async (
     loggedAs = "user";
   }
 
-  const conf = await getProjectConf(infos);
-  conf.set({
-    accessToken: client.options.accessToken,
-    refreshToken: client.options.refreshToken,
-  });
-
   console.log("Logged !");
 
   return loggedAs;
@@ -452,13 +474,6 @@ export const loginAccount = async (credentials: {
   const client = await getProjectClient();
   await client.loginAccount(credentials);
 
-  const infos = await getProjectInfos();
-  const conf = await getProjectConf(infos);
-  conf.set({
-    accessToken: client.options.accessToken,
-    refreshToken: client.options.refreshToken,
-  });
-
   console.log("Logged !");
 };
 
@@ -468,12 +483,6 @@ export const loginUser = async (credentials: {
 }) => {
   const client = getGlobalClient();
   await client.loginUser(credentials);
-
-  const conf = getGlobalConf();
-  conf.set({
-    accessToken: client.options.accessToken,
-    refreshToken: client.options.refreshToken,
-  });
 
   console.log("Logged !");
 };
